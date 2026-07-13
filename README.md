@@ -3,6 +3,7 @@
 [![Lint](https://github.com/georgetruong88/keyboard-piano/actions/workflows/lint.yml/badge.svg)](https://github.com/georgetruong88/keyboard-piano/actions/workflows/lint.yml)
 [![Build](https://github.com/georgetruong88/keyboard-piano/actions/workflows/build.yml/badge.svg)](https://github.com/georgetruong88/keyboard-piano/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/github/license/georgetruong88/keyboard-piano)](LICENSE)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/georgetruong88/keyboard-piano/master/coverage-badge.json)](https://github.com/georgetruong88/keyboard-piano/actions/workflows/coverage.yml)
 
 Play musical notes with your laptop keyboard. A pygame/numpy synth with 13
 instruments, a drum-beat sequencer, instrument+beat presets, note
@@ -99,6 +100,19 @@ than the regular kit.
 | Key | Action |
 |---|---|
 | `Esc` | quit |
+
+## Tests
+
+```bash
+pip install pytest pytest-cov
+pytest tests/ --cov=piano --cov-report=term-missing
+```
+
+Tests cover the pure-logic parts (pitch math, synthesis output, beat pattern
+integrity, preset/recording persistence) headlessly via `SDL_VIDEODRIVER` /
+`SDL_AUDIODRIVER` set to `dummy` in `tests/conftest.py`. The interactive
+`main()` event loop itself isn't unit-tested — it's been exercised manually
+by driving real keypresses through the actual event loop instead.
 
 ## Notes
 

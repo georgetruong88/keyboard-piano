@@ -1,0 +1,65 @@
+name: Coverage
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pygame numpy pytest pytest-cov
+      - name: Run tests with coverage
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: pytest tests/ --cov=piano --cov-report=term-missing --cov-report=json
+
+      - name: Generate coverage badge JSON
+        run: |
+          python3 <<'EOF'
+          import json
+
+          with open("coverage.json") as f:
+              data = json.load(f)
+          pct = round(data["totals"]["percent_covered"])
+
+          if pct >= 90:
+              color = "brightgreen"
+          elif pct >= 75:
+              color = "green"
+          elif pct >= 60:
+              color = "yellowgreen"
+          elif pct >= 40:
+              color = "yellow"
+          elif pct >= 20:
+              color = "orange"
+          else:
+              color = "red"
+
+          badge = {
+              "schemaVersion": 1,
+              "label": "coverage",
+              "message": f"{pct}%",
+              "color": color,
+          }
+          with open("coverage-badge.json", "w") as f:
+              json.dump(badge, f)
+          EOF
+
+      - name: Commit updated badge
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add coverage-badge.json
+          git diff --staged --quiet || git commit -m "Update coverage badge [skip ci]"
+          git push

@@ -2,3 +2,9 @@ __pycache__/
 *.pyc
 recording.json
 presets.json
+.venv/
+.coverage
+.pytest_cache/
+.ruff_cache/
+coverage.json
+coverage.svg
