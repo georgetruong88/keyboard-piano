@@ -1,6 +1,7 @@
 # Keyboard Piano
 
 [![Lint](https://github.com/georgetruong88/keyboard-piano/actions/workflows/lint.yml/badge.svg)](https://github.com/georgetruong88/keyboard-piano/actions/workflows/lint.yml)
+[![Build](https://github.com/georgetruong88/keyboard-piano/actions/workflows/build.yml/badge.svg)](https://github.com/georgetruong88/keyboard-piano/actions/workflows/build.yml)
 
 Play musical notes with your laptop keyboard. A pygame/numpy synth with 13
 instruments, a drum-beat sequencer, instrument+beat presets, note
