@@ -101,3 +101,7 @@ than the regular kit.
 - `recording.json` and `presets.json` are generated at runtime next to
   `piano.py` and are gitignored — they're your local session state, not
   part of the source.
+
+## License
+
+[MIT](LICENSE)
