@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Keyboard Piano
+Comment=Play musical notes with your laptop keyboard
+Exec=python3 /home/kali/Projects/keyboard-piano/piano.py
+Path=/home/kali/Projects/keyboard-piano
+Icon=/home/kali/Projects/keyboard-piano/icon.png
+Terminal=false
+Categories=AudioVideo;Audio;Music;

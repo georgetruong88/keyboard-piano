@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+recording.json
+presets.json
