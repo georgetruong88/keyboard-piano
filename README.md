@@ -5,6 +5,8 @@ instruments, a drum-beat sequencer, instrument+beat presets, note
 recording/playback, and a DJ scratch layer — everything synthesized
 procedurally, no audio samples.
 
+![Keyboard Piano screenshot](screenshot.png)
+
 ## Requirements
 
 - Python 3
