@@ -37,6 +37,7 @@ def _redirect_persistence(monkeypatch, tmp_path):
 
 
 def test_main_loop_exercises_full_event_handling(monkeypatch, tmp_path):
+    rec_path = str(tmp_path / "recording.json")
     _redirect_persistence(monkeypatch, tmp_path)
     # main() calls pygame.quit() on exit, which would tear down the shared
     # mixer/display for every other test in this process - no-op it here.
@@ -44,6 +45,13 @@ def test_main_loop_exercises_full_event_handling(monkeypatch, tmp_path):
 
     def driver():
         time.sleep(0.15)
+
+        # SAVE with nothing recorded yet, then LOAD with no file on disk -
+        # the "nothing to save" / FileNotFoundError branches
+        click(piano.SAVE_RECT)
+        time.sleep(0.05)
+        click(piano.LOAD_RECT)
+        time.sleep(0.05)
 
         # octave shift
         tap(pygame.K_z)
@@ -61,31 +69,54 @@ def test_main_loop_exercises_full_event_handling(monkeypatch, tmp_path):
         tap(pygame.K_m)
         tap(pygame.K_m)  # unmute again
 
-        # record a note, stop, play it back
+        # record a white note and a black note, stop, play both back -
+        # covers active/playback highlighting for both key colors
         tap(pygame.K_r)
         time.sleep(0.02)
         post(pygame.K_a, True)
         time.sleep(0.02)
         post(pygame.K_a, False)
         time.sleep(0.02)
+        post(pygame.K_w, True)
+        time.sleep(0.02)
+        post(pygame.K_w, False)
+        # hold recording open past one full blink cycle (0.5s) so the
+        # REC-badge blinking dot's on-phase is hit regardless of start phase
+        time.sleep(0.6)
         tap(pygame.K_r)
         time.sleep(0.02)
         tap(pygame.K_p)
-        time.sleep(0.05)
+        time.sleep(0.1)
 
-        # SAVE then LOAD via the on-screen buttons (redirected paths)
+        # SAVE then LOAD via the on-screen buttons (redirected paths) -
+        # the success branches, now with real recorded content
         click(piano.SAVE_RECT)
         time.sleep(0.05)
         click(piano.LOAD_RECT)
         time.sleep(0.05)
 
-        # backing beat: on, cycle every pattern, adjust tempo, let it tick
+        # corrupt the saved file on disk, then LOAD again - the
+        # JSONDecodeError/ValueError "corrupt" branch
+        with open(rec_path, "w") as f:
+            f.write("not valid json")
+        click(piano.LOAD_RECT)
+        time.sleep(0.05)
+
+        # backing beat: on, let Rock run long enough to hit its snare step
         tap(pygame.K_b)
-        for _ in range(len(piano.BEAT_NAMES)):
+        time.sleep(0.9)
+
+        # switch pattern and let it run long enough to guarantee crossing
+        # an open-hihat step (period-4 in Four on the Floor's pattern)
+        tap(pygame.K_n)
+        time.sleep(1.6)
+
+        # cycle through the rest of the patterns (exercises the N key /
+        # every pattern name generally)
+        for _ in range(len(piano.BEAT_NAMES) - 1):
             tap(pygame.K_n)
         tap(pygame.K_LEFTBRACKET)
         tap(pygame.K_RIGHTBRACKET)
-        time.sleep(0.3)
 
         # presets: save a slot, load it back, then try an empty slot
         post(pygame.K_F1, True, mod=pygame.KMOD_CTRL)
@@ -94,6 +125,10 @@ def test_main_loop_exercises_full_event_handling(monkeypatch, tmp_path):
         tap(pygame.K_F1)
         time.sleep(0.02)
         tap(pygame.K_F2)
+
+        # let the preset message expire so the persistent "Presets: ..."
+        # status line renders instead (message-cleared, presets non-empty)
+        time.sleep(2.1)
 
         tap(pygame.K_b)  # beat off
 
@@ -110,7 +145,7 @@ def test_main_loop_exercises_full_event_handling(monkeypatch, tmp_path):
     t = threading.Thread(target=driver, daemon=True)
     t.start()
     piano.main()
-    t.join(timeout=2)
+    t.join(timeout=5)
     assert not t.is_alive()
 
 
