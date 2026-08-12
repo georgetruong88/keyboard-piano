@@ -3,35 +3,45 @@
 Keyboard Piano - play musical notes with your laptop keyboard.
 
 Controls:
-  A S D F G H J K   -> C D E F G A B C (white keys, one octave)
-  W E   T Y U       -> C# D#   F# G# A# (black keys)
-  Z / X             -> shift octave down / up
+  39 keys, low to high, three rows plus a few extra reach keys:
+    ` Z X C V B N M , . /        -> low octave (white + black keys mixed in)
+    A S D F G H J K L ; '        -> mid octave
+    Q W E R T Y U I O P [ ] \\    -> high octave
+    Tab Enter Backspace Delete   -> a few extra notes at the very top
+  (the on-screen keyboard shows exactly which physical key plays which note)
+  Up / Down         -> shift the whole 39-key range down / up an octave
   Space (hold)      -> sustain (longer note decay)
   1-9, 0            -> instrument: sine / square / sawtooth / triangle / guitar /
                        drum synth / pipa / guzheng / harmonica /
                        Chinese bamboo flute (dizi)
-  ,                 -> instrument: electric fire guitar (overdriven/distorted)
-  .                 -> instrument: DJ turntable scratch
-  /                 -> scratch stab: one-shot DJ scratch hit that layers on top
+  F9                -> instrument: electric fire guitar (overdriven/distorted)
+  F10               -> instrument: DJ turntable scratch
+  F11               -> instrument: accordion
+  F12               -> instrument: church pipe organ
+  Shift + /         -> scratch stab: one-shot DJ scratch hit that layers on top
                        of whatever instrument is selected and the backing beat,
                        without switching your current instrument
   - / =             -> volume down / up
-  M                 -> mute / unmute
-  R                 -> start/stop recording
-  P                 -> play back last recording
+  Shift + M         -> mute / unmute
+  Shift + R         -> start/stop recording
+  Shift + P         -> play back last recording
   SAVE / LOAD       -> click the on-screen buttons to persist a recording to disk
                        and reload it in a later session
-  B                 -> start/stop backing beat
-  N                 -> cycle beat pattern (Rock, Four on the Floor, Hip-Hop,
-                       Funk, Reggae, Trap, plus epic/historical war-drum
-                       patterns: Taiko, War March, Mongol Gallop,
-                       Viking War Drum, Ottoman Mehter)
-  [ / ]             -> tempo down / up
+  Shift + B         -> start/stop backing beat
+  Shift + N         -> cycle beat pattern: 120 in total - 6 core kit patterns,
+                       59 genre/world/dance patterns, 35 epic/dramatic/
+                       historical war-drum patterns, and 20 ancient costume
+                       drama / wuxia action-soundtrack patterns (see README
+                       for the full list)
+  Shift + [ / ]     -> tempo down / up
+  Shift + G         -> toggle glow-in-the-dark theme (phosphorescent keys that
+                       bloom brighter when played)
   Ctrl + F1..F5     -> save current instrument + beat pattern + tempo as a preset
   F1..F5            -> load that preset (also persisted to presets.json on disk)
   Esc               -> quit
 """
 
+import bisect
 import json
 import math
 import os
@@ -57,22 +67,55 @@ pygame.mixer.set_num_channels(32)
 
 NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
-# key -> semitone offset from C in the current octave (C..C of next octave)
-KEY_OFFSETS = {
-    pygame.K_a: 0,
-    pygame.K_w: 1,
-    pygame.K_s: 2,
-    pygame.K_e: 3,
-    pygame.K_d: 4,
-    pygame.K_f: 5,
-    pygame.K_t: 6,
-    pygame.K_g: 7,
-    pygame.K_y: 8,
-    pygame.K_h: 9,
-    pygame.K_u: 10,
-    pygame.K_j: 11,
-    pygame.K_k: 12,
-}
+# 39 keys, low to high, spanning three octaves + 3 semitones (like a compact
+# 39-key mini keyboard): bottom row = low octave, home row = mid octave,
+# top row = high octave, with a handful of extra keys reaching one more
+# octave's worth of overflow at the top.
+NOTE_KEY_DEFS = [
+    (pygame.K_BACKQUOTE, "`"),
+    (pygame.K_z, "Z"),
+    (pygame.K_x, "X"),
+    (pygame.K_c, "C"),
+    (pygame.K_v, "V"),
+    (pygame.K_b, "B"),
+    (pygame.K_n, "N"),
+    (pygame.K_m, "M"),
+    (pygame.K_COMMA, ","),
+    (pygame.K_PERIOD, "."),
+    (pygame.K_SLASH, "/"),
+    (pygame.K_a, "A"),
+    (pygame.K_s, "S"),
+    (pygame.K_d, "D"),
+    (pygame.K_f, "F"),
+    (pygame.K_g, "G"),
+    (pygame.K_h, "H"),
+    (pygame.K_j, "J"),
+    (pygame.K_k, "K"),
+    (pygame.K_l, "L"),
+    (pygame.K_SEMICOLON, ";"),
+    (pygame.K_QUOTE, "'"),
+    (pygame.K_q, "Q"),
+    (pygame.K_w, "W"),
+    (pygame.K_e, "E"),
+    (pygame.K_r, "R"),
+    (pygame.K_t, "T"),
+    (pygame.K_y, "Y"),
+    (pygame.K_u, "U"),
+    (pygame.K_i, "I"),
+    (pygame.K_o, "O"),
+    (pygame.K_p, "P"),
+    (pygame.K_LEFTBRACKET, "["),
+    (pygame.K_RIGHTBRACKET, "]"),
+    (pygame.K_BACKSLASH, "\\"),
+    (pygame.K_TAB, "Tab"),
+    (pygame.K_RETURN, "Ret"),
+    (pygame.K_BACKSPACE, "BS"),
+    (pygame.K_DELETE, "Del"),
+]
+assert len(NOTE_KEY_DEFS) == 39
+
+# key -> semitone offset from C in the current octave (0..38, low to high)
+KEY_OFFSETS = {key: offset for offset, (key, _label) in enumerate(NOTE_KEY_DEFS)}
 
 WAVEFORMS = {
     pygame.K_1: "sine",
@@ -85,8 +128,10 @@ WAVEFORMS = {
     pygame.K_8: "guzheng",
     pygame.K_9: "harmonica",
     pygame.K_0: "dizi",
-    pygame.K_COMMA: "fire_guitar",
-    pygame.K_PERIOD: "dj_scratch",
+    pygame.K_F9: "fire_guitar",
+    pygame.K_F10: "dj_scratch",
+    pygame.K_F11: "accordion",
+    pygame.K_F12: "organ",
 }
 
 INSTRUMENT_LABELS = {
@@ -102,6 +147,8 @@ INSTRUMENT_LABELS = {
     "pipa": "pipa",
     "guzheng": "guzheng",
     "dj_scratch": "DJ turntable scratch",
+    "accordion": "accordion",
+    "organ": "church pipe organ",
 }
 
 REVERSE_KEY_OFFSETS = {offset: key for key, offset in KEY_OFFSETS.items()}
@@ -314,6 +361,62 @@ def make_harmonica_wave(freq, duration):
     return pygame.sndarray.make_sound(audio)
 
 
+def make_accordion_wave(freq, duration):
+    """Accordion: two reed banks tuned a hair apart (musette tuning) beating
+    against each other for the classic warbling chorus, driven by a slow
+    bellows swell attack rather than a percussive pluck."""
+    t = np.linspace(0, duration, int(SAMPLE_RATE * duration), endpoint=False)
+    detune = 1.006
+    reed1 = (
+        np.sin(2 * np.pi * freq * t)
+        + 0.4 * np.sin(2 * np.pi * freq * 2 * t)
+        + 0.2 * np.sin(2 * np.pi * freq * 3 * t)
+    )
+    reed2 = (
+        np.sin(2 * np.pi * freq * detune * t)
+        + 0.4 * np.sin(2 * np.pi * freq * 2 * detune * t)
+        + 0.2 * np.sin(2 * np.pi * freq * 3 * detune * t)
+    )
+    bellows_noise = np.random.uniform(-1, 1, len(t)) * 0.02
+    wave = (reed1 + reed2) * 0.5 + bellows_noise
+
+    attack = min(int(0.06 * SAMPLE_RATE), len(wave))
+    envelope = np.ones_like(wave)
+    envelope[:attack] = np.linspace(0, 1, attack) ** 1.5  # gradual bellows swell
+    envelope *= np.exp(-0.8 * t / duration)  # sustains longer than a plucked string
+    wave *= envelope
+    peak = np.max(np.abs(wave)) or 1.0
+    audio = (wave / peak * 0.4 * 32767).astype(np.int16)
+    return pygame.sndarray.make_sound(audio)
+
+
+def make_organ_wave(freq, duration):
+    """Church pipe organ: a full additive harmonic stack (drawbar-style) held
+    at a near-constant amplitude, with the characteristic "chiff" - a brief
+    noise burst as the pipe first speaks."""
+    t = np.linspace(0, duration, int(SAMPLE_RATE * duration), endpoint=False)
+    harmonics = [1.0, 0.5, 0.33, 0.25, 0.2, 0.15, 0.1]
+    wave = np.zeros_like(t)
+    for i, amp in enumerate(harmonics, start=1):
+        wave += amp * np.sin(2 * np.pi * freq * i * t)
+
+    chiff_len = min(int(0.015 * SAMPLE_RATE), len(t))
+    chiff = np.zeros_like(t)
+    chiff[:chiff_len] = np.random.uniform(-1, 1, chiff_len) * np.exp(
+        -30.0 * np.linspace(0, 1, chiff_len)
+    )
+    wave += chiff * 0.3
+
+    attack = min(int(0.02 * SAMPLE_RATE), len(wave))
+    envelope = np.ones_like(wave)
+    envelope[:attack] = np.linspace(0, 1, attack)
+    envelope *= np.exp(-0.15 * t / duration)  # very gentle decay, sustains like a real pipe
+    wave *= envelope
+    peak = np.max(np.abs(wave)) or 1.0
+    audio = (wave / peak * 0.4 * 32767).astype(np.int16)
+    return pygame.sndarray.make_sound(audio)
+
+
 def make_wave(freq, duration, shape):
     if shape == "guitar":
         return make_guitar_wave(freq, duration)
@@ -331,6 +434,10 @@ def make_wave(freq, duration, shape):
         return make_guzheng_wave(freq, duration)
     if shape == "dj_scratch":
         return make_dj_scratch_wave(freq, duration)
+    if shape == "accordion":
+        return make_accordion_wave(freq, duration)
+    if shape == "organ":
+        return make_organ_wave(freq, duration)
     return make_basic_wave(freq, duration, shape)
 
 
@@ -497,8 +604,167 @@ BEATS = {
         "hat":   [2,0,0,0, 0,0,0,0, 2,0,0,0, 0,0,0,0],
     },
 }
+
+
+def _steps(*positions):
+    """16-step kick/snare voice: 1 at each given step index (0-15), else 0."""
+    pattern = [0] * 16
+    for p in positions:
+        pattern[p] = 1
+    return pattern
+
+
+def _hat(closed=(), open_=()):
+    """16-step hat voice: 1 (closed) / 2 (open) at the given step indices."""
+    pattern = [0] * 16
+    for p in closed:
+        pattern[p] = 1
+    for p in open_:
+        pattern[p] = 2
+    return pattern
+
+
+_EIGHTHS = (0, 2, 4, 6, 8, 10, 12, 14)
+_SIXTEENTHS = tuple(range(16))
+_BACKBEAT = (4, 12)
+
+# -- extra genre/world/dance patterns, rounding the library out to 100 beats.
+NEW_GENRE_BEATS = {
+    "Punk Rock": {"kick": _steps(0, 4, 8, 12), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_SIXTEENTHS)},
+    "Metal Double Bass": {"kick": _steps(*_SIXTEENTHS), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_EIGHTHS)},
+    "Blast Beat": {"kick": _steps(0, 2, 4, 6, 8, 10, 12, 14), "snare": _steps(1, 3, 5, 7, 9, 11, 13, 15), "hat": _hat()},
+    "Grunge": {"kick": _steps(0, 6, 8), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_EIGHTHS)},
+    "Arena Rock": {"kick": _steps(0, 4, 8, 10, 12), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_EIGHTHS, open_=(14,))},
+    "Southern Rock": {"kick": _steps(0, 6, 8, 12), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_EIGHTHS)},
+    "Glam Rock": {"kick": _steps(0, 4, 8, 12), "snare": _steps(4, 7, 12, 15), "hat": _hat(closed=_SIXTEENTHS)},
+    "P-Funk": {"kick": _steps(0, 3, 6, 10, 14), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_SIXTEENTHS, open_=(14,))},
+    "Motown Groove": {"kick": _steps(0, 8), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_EIGHTHS)},
+    "New Orleans Second Line": {"kick": _steps(0, 3, 6, 10, 12), "snare": _steps(2, 5, 9, 13), "hat": _hat(closed=(0, 4, 8, 12))},
+    "Go-Go": {"kick": _steps(0, 3, 6, 8, 11, 14), "snare": _steps(4, 7, 12, 15), "hat": _hat(closed=_SIXTEENTHS)},
+    "Neo Soul": {"kick": _steps(0, 10), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_EIGHTHS)},
+    "Bossa Nova": {"kick": _steps(0, 6, 8, 11), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_EIGHTHS)},
+    "Samba": {"kick": _steps(0, 4, 7, 8, 12, 15), "snare": _steps(2, 6, 10, 14), "hat": _hat(closed=_SIXTEENTHS)},
+    "Salsa": {"kick": _steps(0, 3, 6, 8, 11, 14), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_EIGHTHS)},
+    "Cha Cha": {"kick": _steps(0, 8), "snare": _steps(4, 6, 12, 14), "hat": _hat(closed=_SIXTEENTHS)},
+    "Mambo": {"kick": _steps(0, 3, 8, 11), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_SIXTEENTHS)},
+    "Merengue": {"kick": _steps(*_SIXTEENTHS), "snare": _steps(*_BACKBEAT), "hat": _hat()},
+    "Cumbia": {"kick": _steps(0, 6, 8, 14), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=(0, 4, 8, 12))},
+    "Reggaeton": {"kick": _steps(0, 6, 10), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=(2, 10), open_=(14,))},
+    "Tango": {"kick": _steps(0, 4, 8, 12), "snare": _steps(2, 6, 10, 14), "hat": _hat()},
+    "Bachata": {"kick": _steps(0, 8), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_SIXTEENTHS)},
+    "Bolero": {"kick": _steps(0, 6, 8, 12), "snare": _steps(3, 11), "hat": _hat(closed=(0, 4, 8, 12))},
+    "Afrobeat": {"kick": _steps(0, 3, 6, 10, 13), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_SIXTEENTHS)},
+    "Highlife": {"kick": _steps(0, 6, 8, 11, 14), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_SIXTEENTHS)},
+    "Soukous": {"kick": _steps(0, 4, 8, 12), "snare": _steps(2, 6, 10, 14), "hat": _hat(closed=_SIXTEENTHS)},
+    "Bhangra": {"kick": _steps(*_EIGHTHS), "snare": _steps(*_BACKBEAT), "hat": _hat()},
+    "Dabke": {"kick": _steps(0, 3, 6, 8, 11, 14), "snare": _steps(*_BACKBEAT), "hat": _hat()},
+    "Balkan Brass": {"kick": _steps(0, 3, 6, 8, 11, 14), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_SIXTEENTHS)},
+    "Klezmer": {"kick": _steps(0, 4, 8, 12), "snare": _steps(2, 6, 10, 14), "hat": _hat(closed=_SIXTEENTHS)},
+    "Flamenco Rumba": {"kick": _steps(0, 3, 6, 8, 11, 14), "snare": _steps(4, 7, 12, 15), "hat": _hat(closed=_SIXTEENTHS)},
+    "Irish Jig": {"kick": _steps(0, 6, 8, 14), "snare": _steps(*_BACKBEAT), "hat": _hat()},
+    "Celtic Reel": {"kick": _steps(0, 4, 8, 12), "snare": _steps(2, 6, 10, 14), "hat": _hat(closed=_EIGHTHS)},
+    "Powwow Drum": {"kick": _steps(*_EIGHTHS), "snare": _steps(), "hat": _hat()},
+    "Gqom": {"kick": _steps(0, 8), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=(2, 6, 10, 14))},
+    "Amapiano": {"kick": _steps(0, 8), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_SIXTEENTHS, open_=(6, 14))},
+    "Dancehall": {"kick": _steps(0, 6, 10), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=(2, 10))},
+    "Baile Funk": {"kick": _steps(0, 3, 6, 8, 11, 14), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_SIXTEENTHS)},
+    "House": {"kick": _steps(0, 4, 8, 12), "snare": _steps(*_BACKBEAT), "hat": _hat(open_=(2, 6, 10, 14))},
+    "Techno": {"kick": _steps(0, 4, 8, 12), "snare": _steps(), "hat": _hat(closed=_SIXTEENTHS)},
+    "Trance": {"kick": _steps(0, 4, 8, 12), "snare": _steps(), "hat": _hat(closed=_EIGHTHS, open_=(2, 6, 10, 14))},
+    "Drum and Bass": {"kick": _steps(0, 10), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_SIXTEENTHS)},
+    "Jungle": {"kick": _steps(0, 3, 10), "snare": _steps(4, 7, 12, 15), "hat": _hat(closed=_SIXTEENTHS)},
+    "Dubstep": {"kick": _steps(0), "snare": _steps(8), "hat": _hat(closed=(0, 4, 8, 12))},
+    "Breakbeat": {"kick": _steps(0, 10), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_SIXTEENTHS)},
+    "Big Beat": {"kick": _steps(0, 4, 8, 12), "snare": _steps(*_BACKBEAT), "hat": _hat(open_=(2, 6, 10, 14))},
+    "UK Garage": {"kick": _steps(0, 6, 10), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_SIXTEENTHS)},
+    "Industrial": {"kick": _steps(*_SIXTEENTHS), "snare": _steps(*_BACKBEAT), "hat": _hat()},
+    "EDM Festival": {"kick": _steps(0, 4, 8, 12), "snare": _steps(), "hat": _hat(closed=_SIXTEENTHS, open_=(14,))},
+    "Downtempo": {"kick": _steps(0, 8), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=(0, 4, 8, 12))},
+    "Trip-Hop": {"kick": _steps(0, 10), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=(2, 6, 10, 14))},
+    "Synthwave": {"kick": _steps(0, 4, 8, 12), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_EIGHTHS)},
+    "Electro": {"kick": _steps(0, 4, 8, 10, 12), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_SIXTEENTHS)},
+    "Boom Bap": {"kick": _steps(0, 10), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_SIXTEENTHS)},
+    "Drill": {"kick": _steps(0, 9, 10), "snare": _steps(12), "hat": _hat(closed=_SIXTEENTHS, open_=(14,))},
+    "Grime": {"kick": _steps(0, 6, 10), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_SIXTEENTHS)},
+    "Phonk": {"kick": _steps(0, 6, 10), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_SIXTEENTHS)},
+    "West Coast G-Funk": {"kick": _steps(0, 6, 8, 12), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_SIXTEENTHS)},
+    "Jersey Club": {"kick": _steps(0, 3, 6, 8, 11, 14), "snare": _steps(*_BACKBEAT), "hat": _hat(closed=_SIXTEENTHS)},
+}
+
+# -- more epic/historical/cinematic war-drum patterns, in the spirit of Taiko
+# / War March / Mongol Gallop / Viking War Drum / Ottoman Mehter above: sparse
+# or absent hihat, snare doubling as a second drum voice for rolls/accents.
+NEW_EPIC_BEATS = {
+    "Roman Legion March": {"kick": _steps(0, 4, 8, 12), "snare": _steps(2, 6, 10, 14), "hat": _hat()},
+    "Spartan Phalanx": {"kick": _steps(0, 2, 8, 10), "snare": _steps(4, 12), "hat": _hat()},
+    "Zulu War Chant": {"kick": _steps(0, 3, 6, 9, 12), "snare": _steps(7, 15), "hat": _hat()},
+    "Samurai Wadaiko": {"kick": _steps(0, 1, 4, 7, 8, 9, 12, 15), "snare": _steps(6, 14), "hat": _hat()},
+    "Norse Berserker Charge": {"kick": _steps(*_EIGHTHS), "snare": _steps(3, 11), "hat": _hat()},
+    "Aztec War Drum": {"kick": _steps(0, 5, 8, 13), "snare": _steps(3, 11), "hat": _hat(closed=(2, 10))},
+    "Celtic Battle Drum": {"kick": _steps(0, 3, 4, 7, 8, 11, 12, 15), "snare": _steps(6, 14), "hat": _hat()},
+    "Byzantine Cataphract": {"kick": _steps(0, 4, 6, 8, 12, 14), "snare": _steps(2, 10), "hat": _hat()},
+    "Persian Immortals": {"kick": _steps(0, 2, 4, 8, 10, 12), "snare": _steps(6, 14), "hat": _hat()},
+    "Hunnic Horde": {"kick": _steps(0, 1, 2, 4, 5, 8, 9, 10, 12, 13), "snare": _steps(6, 14), "hat": _hat()},
+    "Crusader Charge": {"kick": _steps(0, 4, 7, 8, 12, 15), "snare": _steps(2, 10), "hat": _hat(open_=(0, 8))},
+    "Great Wall Siege": {"kick": _steps(0, 8), "snare": _steps(4, 6, 12, 14), "hat": _hat()},
+    "Highland Charge": {"kick": _steps(0, 3, 6, 8, 11, 14), "snare": _steps(2, 10), "hat": _hat()},
+    "Gladiator Arena": {"kick": _steps(*_EIGHTHS), "snare": _steps(4, 12), "hat": _hat(open_=(0, 8))},
+    "Titan's March": {"kick": _steps(0, 4, 8, 12), "snare": _steps(2, 3, 10, 11), "hat": _hat()},
+    "Apocalypse Drums": {"kick": _steps(0, 2, 3, 6, 8, 10, 11, 14), "snare": _steps(4, 12), "hat": _hat(closed=(1, 5, 9, 13))},
+    "Thunder God's Wrath": {"kick": _steps(0, 1, 4, 5, 8, 9, 12, 13), "snare": _steps(6, 7, 14, 15), "hat": _hat()},
+    "Dragon's Roar": {"kick": _steps(0, 3, 5, 8, 11, 13), "snare": _steps(6, 14), "hat": _hat()},
+    "Final Battle Crescendo": {"kick": _steps(0, 2, 4, 6, 8, 9, 10, 12, 14, 15), "snare": _steps(4, 12), "hat": _hat(closed=(1, 3, 5, 7, 9, 11, 13, 15))},
+    "Siege Engine": {"kick": _steps(0, 4, 8, 12), "snare": _steps(6, 7, 14, 15), "hat": _hat()},
+    "Imperial March": {"kick": _steps(0, 4, 8, 12), "snare": _steps(2, 3, 10, 11), "hat": _hat(closed=(0, 4, 8, 12))},
+    "Warlord's Command": {"kick": _steps(0, 3, 4, 8, 11, 12), "snare": _steps(6, 14), "hat": _hat()},
+    "Berserker Frenzy": {"kick": _steps(0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13), "snare": _steps(6, 14), "hat": _hat()},
+    "Doom Toll": {"kick": _steps(0, 8), "snare": _steps(), "hat": _hat(open_=(4, 12))},
+    "Valkyrie Ride": {"kick": _steps(*_EIGHTHS), "snare": _steps(2, 6, 10, 14), "hat": _hat()},
+    "Ragnarok": {"kick": _steps(0, 1, 3, 4, 6, 8, 9, 11, 12, 14), "snare": _steps(4, 12), "hat": _hat(closed=(2, 10))},
+    "Colossus Awakens": {"kick": _steps(0, 8), "snare": _steps(4, 5, 12, 13), "hat": _hat()},
+    "Dark Lord's Drums": {"kick": _steps(0, 3, 6, 8, 11, 14), "snare": _steps(4, 12), "hat": _hat()},
+    "Phoenix Rising": {"kick": _steps(0, 2, 4, 8, 10, 12), "snare": _steps(6, 7, 14, 15), "hat": _hat(open_=(0, 8))},
+    "Last Stand": {"kick": _steps(0, 1, 2, 4, 8, 9, 10, 12), "snare": _steps(6, 14), "hat": _hat()},
+}
+
+# -- ancient costume drama / wuxia action-soundtrack patterns (the percussion
+# bed under a fight scene, a chase through the palace, a tragic court
+# reveal): same sparse-hihat / doubled-snare-as-second-drum convention as the
+# epic set above, but scenario-driven rather than culture-driven.
+NEW_COSTUME_DRAMA_BEATS = {
+    "Wuxia Sword Duel": {"kick": _steps(*_EIGHTHS), "snare": _steps(1, 3, 5, 7, 9, 11, 13, 15), "hat": _hat()},
+    "Palace Intrigue": {"kick": _steps(0, 7), "snare": _steps(11), "hat": _hat(open_=(14,))},
+    "Assassin's Stealth": {"kick": _steps(0, 9), "snare": _steps(), "hat": _hat(closed=(4, 12))},
+    "Imperial Procession": {"kick": _steps(0, 4, 8, 12), "snare": _steps(2, 6, 10, 14), "hat": _hat(open_=(0, 8))},
+    "Ancient Battlefield Charge": {"kick": _steps(*_EIGHTHS), "snare": _steps(3, 7, 11, 15), "hat": _hat()},
+    "Tragic Betrayal": {"kick": _steps(0, 6), "snare": _steps(3, 9, 12), "hat": _hat(open_=(15,))},
+    "Rebel Uprising": {"kick": _steps(0, 1, 4, 5, 8, 9, 12, 13), "snare": _steps(6, 7, 14, 15), "hat": _hat()},
+    "Emperor's Wrath": {"kick": _steps(0, 4, 8, 12), "snare": _steps(2, 3, 4, 10, 11, 12), "hat": _hat()},
+    "Forbidden City Chase": {"kick": _steps(0, 2, 3, 6, 8, 10, 11, 14), "snare": _steps(4, 12), "hat": _hat(closed=(1, 5, 9, 13))},
+    "Martial Arts Showdown": {"kick": _steps(0, 3, 5, 8, 11, 13), "snare": _steps(6, 14), "hat": _hat()},
+    "General's Return": {"kick": _steps(0, 4, 8, 12), "snare": _steps(2, 6, 10, 14), "hat": _hat(open_=(0, 4, 8, 12))},
+    "Night Raid": {"kick": _steps(0, 7, 10), "snare": _steps(4, 12), "hat": _hat(closed=(2, 6, 10, 14))},
+    "Court Execution": {"kick": _steps(0, 8), "snare": _steps(), "hat": _hat(open_=(12,))},
+    "Dynasty's Fall": {"kick": _steps(0, 3, 6, 9, 12, 15), "snare": _steps(4, 5, 12, 13), "hat": _hat()},
+    "Heroic Sacrifice": {"kick": _steps(0, 4, 8, 12), "snare": _steps(2, 3, 6, 7, 10, 11, 14, 15), "hat": _hat()},
+    "Qin Dynasty March": {"kick": _steps(0, 4, 8, 12), "snare": _steps(6, 14), "hat": _hat(closed=_EIGHTHS)},
+    "Han Dynasty Cavalry": {"kick": _steps(*_EIGHTHS), "snare": _steps(1, 9), "hat": _hat()},
+    "Tang Court Dance": {"kick": _steps(0, 6, 8, 12), "snare": _steps(3, 11), "hat": _hat(closed=(0, 3, 6, 9, 12, 15))},
+    "Song Dynasty Siege": {"kick": _steps(0, 1, 4, 8, 9, 12), "snare": _steps(6, 14), "hat": _hat()},
+    "Three Kingdoms Battle": {"kick": _steps(0, 2, 4, 5, 8, 10, 12, 13), "snare": _steps(6, 7, 14, 15), "hat": _hat()},
+}
+
+BEATS.update(NEW_GENRE_BEATS)
+BEATS.update(NEW_EPIC_BEATS)
+BEATS.update(NEW_COSTUME_DRAMA_BEATS)
+assert len(BEATS) == 120
+
 BEAT_NAMES = list(BEATS.keys())
-EPIC_BEATS = {"Taiko", "War March", "Mongol Gallop", "Viking War Drum", "Ottoman Mehter"}
+EPIC_BEATS = (
+    {"Taiko", "War March", "Mongol Gallop", "Viking War Drum", "Ottoman Mehter"}
+    | set(NEW_EPIC_BEATS.keys())
+    | set(NEW_COSTUME_DRAMA_BEATS.keys())
+)
 
 
 SAVE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recording.json")
@@ -540,13 +806,14 @@ def save_presets(presets, path=PRESETS_PATH):
 
 # ------------------------------------------------------------------ UI -----
 
-WIDTH, HEIGHT = 900, 440
+WIDTH, HEIGHT = 1300, 460
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Keyboard Piano")
 clock = pygame.time.Clock()
 font_big = pygame.font.SysFont("dejavusans", 48)
 font_mid = pygame.font.SysFont("dejavusans", 24)
 font_small = pygame.font.SysFont("dejavusans", 18)
+font_key = pygame.font.SysFont("dejavusans", 13)
 
 BG = (24, 24, 28)
 WHITE_KEY = (245, 245, 245)
@@ -561,29 +828,65 @@ REC_COLOR = (220, 70, 70)
 PLAY_COLOR = (80, 200, 120)
 SCRATCH_COLOR = (230, 130, 230)
 
+# Glow-in-the-dark theme (Shift+G): phosphorescent green palette, keys idle
+# with a faint self-glow like charged plastic and bloom brighter when played.
+GLOW_BG = (3, 9, 6)
+GLOW_WHITE_KEY = (35, 82, 50)
+GLOW_WHITE_KEY_ACTIVE = (215, 255, 200)
+GLOW_WHITE_KEY_PLAYBACK = (150, 255, 205)
+GLOW_BLACK_KEY = (8, 26, 14)
+GLOW_BLACK_KEY_ACTIVE = (140, 255, 120)
+GLOW_BLACK_KEY_PLAYBACK = (80, 255, 165)
+GLOW_KEY_LABEL_IDLE = (120, 220, 150)
+GLOW_KEY_LABEL_ACTIVE = (10, 40, 20)
+GLOW_TEXT = (150, 255, 160)
+GLOW_ACCENT = (130, 255, 150)
+GLOW_IDLE_HALO = (80, 220, 120)
+
+# A note is a white key unless its offset-within-octave is one of these.
+WHITE_OFFSET_MODS = {0, 2, 4, 5, 7, 9, 11}
+
 WHITE_KEYS = [
-    (pygame.K_a, "A", 0),
-    (pygame.K_s, "S", 2),
-    (pygame.K_d, "D", 4),
-    (pygame.K_f, "F", 5),
-    (pygame.K_g, "G", 7),
-    (pygame.K_h, "H", 9),
-    (pygame.K_j, "J", 11),
-    (pygame.K_k, "K", 12),
-]
-BLACK_KEYS = [
-    (pygame.K_w, "W", 1, 0),
-    (pygame.K_e, "E", 3, 1),
-    (pygame.K_t, "T", 6, 3),
-    (pygame.K_y, "Y", 8, 4),
-    (pygame.K_u, "U", 10, 5),
+    (key, label, offset)
+    for offset, (key, label) in enumerate(NOTE_KEY_DEFS)
+    if offset % 12 in WHITE_OFFSET_MODS
 ]
 
-KEY_LABEL_ORDER = list(range(13))
+_white_offsets_sorted = [offset for _, _, offset in WHITE_KEYS]
+
+
+def _after_white_idx(offset):
+    """Index (into WHITE_KEYS) of the white key a black key visually sits after."""
+    return bisect.bisect_left(_white_offsets_sorted, offset) - 1
+
+
+BLACK_KEYS = [
+    (key, label, offset, _after_white_idx(offset))
+    for offset, (key, label) in enumerate(NOTE_KEY_DEFS)
+    if offset % 12 not in WHITE_OFFSET_MODS
+]
 
 
 KB_X, KB_Y = 40, 255
 KB_W, KB_H = WIDTH - 80, 145
+
+
+def draw_glow(surface, rect, color, spread=14, layers=4, max_alpha=90):
+    """Soft additive bloom halo behind a rect, for the glow-in-the-dark theme."""
+    glow_surf = pygame.Surface(
+        (rect.width + spread * 2, rect.height + spread * 2), pygame.SRCALPHA
+    )
+    cx, cy = glow_surf.get_width() / 2, glow_surf.get_height() / 2
+    for i in range(layers, 0, -1):
+        frac = i / layers
+        pad = int(spread * frac)
+        alpha = int(max_alpha * (1 - frac) ** 2 + max_alpha * 0.15)
+        halo_rect = pygame.Rect(0, 0, rect.width + pad * 2, rect.height + pad * 2)
+        halo_rect.center = (cx, cy)
+        pygame.draw.rect(glow_surf, (*color, alpha), halo_rect, border_radius=10)
+    surface.blit(
+        glow_surf, (rect.x - spread, rect.y - spread), special_flags=pygame.BLEND_RGBA_ADD
+    )
 
 
 def draw_keyboard_frame(recording, playing, now, scratch_flash_expire):
@@ -622,7 +925,7 @@ def draw_keyboard_frame(recording, playing, now, scratch_flash_expire):
         screen.blit(badge, (border_rect.x + 22, border_rect.y - 22))
 
 
-def draw_keyboard(active_keys, playback_keys):
+def draw_keyboard(active_keys, playback_keys, glow_mode=False):
     n_white = len(WHITE_KEYS)
     kb_x, kb_y = KB_X, KB_Y
     kb_w, kb_h = KB_W, KB_H
@@ -630,31 +933,56 @@ def draw_keyboard(active_keys, playback_keys):
 
     for i, (key, label, offset) in enumerate(WHITE_KEYS):
         rect = pygame.Rect(kb_x + i * white_w, kb_y, white_w - 2, kb_h)
-        if key in active_keys:
-            color = WHITE_KEY_ACTIVE
-        elif key in playback_keys:
-            color = WHITE_KEY_PLAYBACK
+        is_active = key in active_keys
+        is_playback = key in playback_keys
+        if glow_mode:
+            if is_active:
+                color, label_color = GLOW_WHITE_KEY_ACTIVE, GLOW_KEY_LABEL_ACTIVE
+                draw_glow(screen, rect, GLOW_WHITE_KEY_ACTIVE, spread=20, layers=5, max_alpha=110)
+            elif is_playback:
+                color, label_color = GLOW_WHITE_KEY_PLAYBACK, GLOW_KEY_LABEL_ACTIVE
+                draw_glow(screen, rect, GLOW_WHITE_KEY_PLAYBACK, spread=16, layers=4, max_alpha=85)
+            else:
+                color, label_color = GLOW_WHITE_KEY, GLOW_KEY_LABEL_IDLE
+                draw_glow(screen, rect, GLOW_IDLE_HALO, spread=6, layers=2, max_alpha=22)
+        elif is_active:
+            color, label_color = WHITE_KEY_ACTIVE, (20, 20, 20)
+        elif is_playback:
+            color, label_color = WHITE_KEY_PLAYBACK, (20, 20, 20)
         else:
-            color = WHITE_KEY
+            color, label_color = WHITE_KEY, (20, 20, 20)
         pygame.draw.rect(screen, color, rect, border_radius=6)
         pygame.draw.rect(screen, (10, 10, 10), rect, 2, border_radius=6)
-        lbl = font_small.render(label, True, (20, 20, 20))
-        screen.blit(lbl, (rect.centerx - lbl.get_width() / 2, rect.bottom - 28))
+        lbl = font_key.render(label, True, label_color)
+        screen.blit(lbl, (rect.centerx - lbl.get_width() / 2, rect.bottom - 22))
 
     black_w = white_w * 0.6
     black_h = kb_h * 0.6
     for key, label, offset, after_white_idx in BLACK_KEYS:
         x = kb_x + (after_white_idx + 1) * white_w - black_w / 2
         rect = pygame.Rect(x, kb_y, black_w, black_h)
-        if key in active_keys:
-            color = BLACK_KEY_ACTIVE
-        elif key in playback_keys:
-            color = BLACK_KEY_PLAYBACK
+        is_active = key in active_keys
+        is_playback = key in playback_keys
+        if glow_mode:
+            if is_active:
+                color = GLOW_BLACK_KEY_ACTIVE
+                draw_glow(screen, rect, GLOW_BLACK_KEY_ACTIVE, spread=18, layers=5, max_alpha=110)
+            elif is_playback:
+                color = GLOW_BLACK_KEY_PLAYBACK
+                draw_glow(screen, rect, GLOW_BLACK_KEY_PLAYBACK, spread=14, layers=4, max_alpha=85)
+            else:
+                color = GLOW_BLACK_KEY
+                draw_glow(screen, rect, GLOW_IDLE_HALO, spread=4, layers=2, max_alpha=16)
+            label_color = GLOW_KEY_LABEL_ACTIVE if (is_active or is_playback) else GLOW_KEY_LABEL_IDLE
+        elif is_active:
+            color, label_color = BLACK_KEY_ACTIVE, (230, 230, 230)
+        elif is_playback:
+            color, label_color = BLACK_KEY_PLAYBACK, (230, 230, 230)
         else:
-            color = BLACK_KEY
+            color, label_color = BLACK_KEY, (230, 230, 230)
         pygame.draw.rect(screen, color, rect, border_radius=4)
-        lbl = font_small.render(label, True, (230, 230, 230))
-        screen.blit(lbl, (rect.centerx - lbl.get_width() / 2, rect.bottom - 24))
+        lbl = font_key.render(label, True, label_color)
+        screen.blit(lbl, (rect.centerx - lbl.get_width() / 2, rect.bottom - 18))
 
 
 def draw_volume(volume, muted):
@@ -770,6 +1098,8 @@ def main():
 
     scratch_flash_expire = 0.0
 
+    glow_mode = False
+
     running = True
     while running:
         for event in pygame.event.get():
@@ -777,13 +1107,15 @@ def main():
                 running = False
 
             elif event.type == pygame.KEYDOWN:
+                shift_held = bool(event.mod & pygame.KMOD_SHIFT)
+
                 if event.key == pygame.K_ESCAPE:
                     running = False
 
-                elif event.key == pygame.K_z:
+                elif event.key == pygame.K_DOWN:
                     octave = max(0, octave - 1)
-                elif event.key == pygame.K_x:
-                    octave = min(8, octave + 1)
+                elif event.key == pygame.K_UP:
+                    octave = min(5, octave + 1)
 
                 elif event.key == pygame.K_SPACE:
                     sustain = True
@@ -795,10 +1127,10 @@ def main():
                     volume = max(0.0, round(volume - 0.1, 2))
                 elif event.key in (pygame.K_EQUALS, pygame.K_KP_PLUS):
                     volume = min(1.0, round(volume + 0.1, 2))
-                elif event.key == pygame.K_m:
+                elif event.key == pygame.K_m and shift_held:
                     muted = not muted
 
-                elif event.key == pygame.K_r:
+                elif event.key == pygame.K_r and shift_held:
                     if not recording:
                         recording = True
                         recorded_events = []
@@ -806,25 +1138,25 @@ def main():
                     else:
                         recording = False
 
-                elif event.key == pygame.K_p and recorded_events:
+                elif event.key == pygame.K_p and shift_held and recorded_events:
                     loaded_recording = list(recorded_events)
                     playing = True
                     play_start = time.time()
                     play_index = 0
 
-                elif event.key == pygame.K_b:
+                elif event.key == pygame.K_b and shift_held:
                     beat_on = not beat_on
                     if beat_on:
                         beat_start = time.time()
                         last_beat_step = -1
 
-                elif event.key == pygame.K_n:
+                elif event.key == pygame.K_n and shift_held:
                     beat_index = (beat_index + 1) % len(BEAT_NAMES)
                     last_beat_step = -1
 
-                elif event.key == pygame.K_LEFTBRACKET:
+                elif event.key == pygame.K_LEFTBRACKET and shift_held:
                     bpm = max(40, bpm - 5)
-                elif event.key == pygame.K_RIGHTBRACKET:
+                elif event.key == pygame.K_RIGHTBRACKET and shift_held:
                     bpm = min(240, bpm + 5)
 
                 elif event.key in PRESET_KEYS:
@@ -851,7 +1183,10 @@ def main():
                             preset_message = f"Preset F{slot + 1} is empty"
                     preset_message_expire = time.time() + 2.0
 
-                elif event.key == pygame.K_SLASH:
+                elif event.key == pygame.K_g and shift_held:
+                    glow_mode = not glow_mode
+
+                elif event.key == pygame.K_SLASH and shift_held:
                     scratch_snd = get_sound(octave, 0, "dj_scratch", False)
                     play_note(scratch_snd, volume, muted)
                     last_note_text = note_name(octave, 0) + " (scratch)"
@@ -944,12 +1279,16 @@ def main():
                 elif hat_val == 2:
                     play_note(get_drum_sound("hat_open"), volume, muted)
 
-        screen.fill(BG)
+        screen.fill(GLOW_BG if glow_mode else BG)
 
-        title = font_mid.render("Keyboard Piano", True, ACCENT)
+        theme_accent = GLOW_ACCENT if glow_mode else ACCENT
+        theme_text = GLOW_TEXT if glow_mode else TEXT
+        help_color = GLOW_IDLE_HALO if glow_mode else (150, 150, 150)
+
+        title = font_mid.render("Keyboard Piano" + (" [GLOW]" if glow_mode else ""), True, theme_accent)
         screen.blit(title, (40, 20))
 
-        note_surf = font_big.render(last_note_text or "-", True, TEXT)
+        note_surf = font_big.render(last_note_text or "-", True, theme_text)
         screen.blit(note_surf, (40, 60))
 
         vol_text = "MUTED" if muted else f"{int(volume * 100)}%"
@@ -960,19 +1299,21 @@ def main():
             f"Rec: {'ON' if recording else 'off'}   "
             f"Beat: {BEAT_NAMES[beat_index]} {bpm}bpm {'ON' if beat_on else 'off'}"
         )
-        status_surf = font_small.render(status, True, TEXT)
+        status_surf = font_small.render(status, True, theme_text)
         screen.blit(status_surf, (40, 130))
 
         help_line1 = font_small.render(
-            "A S D F G H J K = C D E F G A B C   |   W E T Y U = sharps",
+            "39 keys, low->high: ` Z X C V B N M , . /  |  A S D F G H J K L ; '  |  "
+            "Q W E R T Y U I O P [ ] \\  |  Tab Enter BS Del",
             True,
-            (150, 150, 150),
+            help_color,
         )
         help_line2 = font_small.render(
-            "Z/X octave  |  Space sustain  |  1-9/0/,/. instrument  |  -/= volume  |  M mute  |  "
-            "R record  |  P play  |  B beat  |  N next beat  |  [/] tempo  |  / scratch  |  Esc quit",
+            "Up/Down octave  |  Space sustain  |  1-9/0 + F9-F12 instrument  |  -/= volume  |  Shift+M mute  |  "
+            "Shift+R record  |  Shift+P play  |  Shift+B beat  |  Shift+N next beat  |  Shift+[/] tempo  |  "
+            "Shift+/ scratch  |  Shift+G glow  |  Esc quit",
             True,
-            (150, 150, 150),
+            help_color,
         )
         screen.blit(help_line1, (40, 158))
         screen.blit(help_line2, (40, 180))
@@ -982,7 +1323,7 @@ def main():
         draw_beat_bar(BEATS[BEAT_NAMES[beat_index]], beat_display_step, beat_on)
         draw_presets(presets, preset_message)
         draw_keyboard_frame(recording, playing, now, scratch_flash_expire)
-        draw_keyboard(active_keys, playback_keys)
+        draw_keyboard(active_keys, playback_keys, glow_mode)
 
         pygame.display.flip()
         clock.tick(120)

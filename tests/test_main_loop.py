@@ -54,8 +54,8 @@ def test_main_loop_exercises_full_event_handling(monkeypatch, tmp_path):
         time.sleep(0.05)
 
         # octave shift
-        tap(pygame.K_z)
-        tap(pygame.K_x)
+        tap(pygame.K_DOWN)
+        tap(pygame.K_UP)
 
         # sustain held while switching through every instrument
         post(pygame.K_SPACE, True)
@@ -66,26 +66,26 @@ def test_main_loop_exercises_full_event_handling(monkeypatch, tmp_path):
         # volume / mute
         tap(pygame.K_MINUS)
         tap(pygame.K_EQUALS)
-        tap(pygame.K_m)
-        tap(pygame.K_m)  # unmute again
+        tap(pygame.K_m, mod=pygame.KMOD_SHIFT)
+        tap(pygame.K_m, mod=pygame.KMOD_SHIFT)  # unmute again
 
-        # record a white note and a black note, stop, play both back -
+        # record a white note (A) and a black note (Z), stop, play both back -
         # covers active/playback highlighting for both key colors
-        tap(pygame.K_r)
+        tap(pygame.K_r, mod=pygame.KMOD_SHIFT)
         time.sleep(0.02)
         post(pygame.K_a, True)
         time.sleep(0.02)
         post(pygame.K_a, False)
         time.sleep(0.02)
-        post(pygame.K_w, True)
+        post(pygame.K_z, True)
         time.sleep(0.02)
-        post(pygame.K_w, False)
+        post(pygame.K_z, False)
         # hold recording open past one full blink cycle (0.5s) so the
         # REC-badge blinking dot's on-phase is hit regardless of start phase
         time.sleep(0.6)
-        tap(pygame.K_r)
+        tap(pygame.K_r, mod=pygame.KMOD_SHIFT)
         time.sleep(0.02)
-        tap(pygame.K_p)
+        tap(pygame.K_p, mod=pygame.KMOD_SHIFT)
         time.sleep(0.1)
 
         # SAVE then LOAD via the on-screen buttons (redirected paths) -
@@ -103,20 +103,20 @@ def test_main_loop_exercises_full_event_handling(monkeypatch, tmp_path):
         time.sleep(0.05)
 
         # backing beat: on, let Rock run long enough to hit its snare step
-        tap(pygame.K_b)
+        tap(pygame.K_b, mod=pygame.KMOD_SHIFT)
         time.sleep(0.9)
 
         # switch pattern and let it run long enough to guarantee crossing
         # an open-hihat step (period-4 in Four on the Floor's pattern)
-        tap(pygame.K_n)
+        tap(pygame.K_n, mod=pygame.KMOD_SHIFT)
         time.sleep(1.6)
 
         # cycle through the rest of the patterns (exercises the N key /
         # every pattern name generally)
         for _ in range(len(piano.BEAT_NAMES) - 1):
-            tap(pygame.K_n)
-        tap(pygame.K_LEFTBRACKET)
-        tap(pygame.K_RIGHTBRACKET)
+            tap(pygame.K_n, mod=pygame.KMOD_SHIFT)
+        tap(pygame.K_LEFTBRACKET, mod=pygame.KMOD_SHIFT)
+        tap(pygame.K_RIGHTBRACKET, mod=pygame.KMOD_SHIFT)
 
         # presets: save a slot, load it back, then try an empty slot
         post(pygame.K_F1, True, mod=pygame.KMOD_CTRL)
@@ -130,14 +130,14 @@ def test_main_loop_exercises_full_event_handling(monkeypatch, tmp_path):
         # status line renders instead (message-cleared, presets non-empty)
         time.sleep(2.1)
 
-        tap(pygame.K_b)  # beat off
+        tap(pygame.K_b, mod=pygame.KMOD_SHIFT)  # beat off
 
         # scratch stab, once while recording to hit that branch too
-        tap(pygame.K_r)
+        tap(pygame.K_r, mod=pygame.KMOD_SHIFT)
         time.sleep(0.02)
-        tap(pygame.K_SLASH)
+        tap(pygame.K_SLASH, mod=pygame.KMOD_SHIFT)
         time.sleep(0.02)
-        tap(pygame.K_r)
+        tap(pygame.K_r, mod=pygame.KMOD_SHIFT)
 
         time.sleep(0.1)
         post(pygame.K_ESCAPE, True)
