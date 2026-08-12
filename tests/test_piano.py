@@ -5,7 +5,6 @@ import pytest
 
 import piano
 
-
 # --------------------------------------------------------------- pitch math
 
 def test_midi_number_middle_c():

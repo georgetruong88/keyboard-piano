@@ -198,7 +198,7 @@ def karplus_strong_core(freq, duration, decay=0.995, damping=0.5):
     Lower damping keeps more high end (brighter/twangier); decay closer to 1
     rings out longer (more resonant string)."""
     n_samples = int(SAMPLE_RATE * duration)
-    period = max(2, int(round(SAMPLE_RATE / freq)))
+    period = max(2, round(SAMPLE_RATE / freq))
     buf = deque(np.random.uniform(-1, 1, period))
     out = np.empty(n_samples)
     for i in range(n_samples):
